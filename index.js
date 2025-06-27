@@ -7,7 +7,7 @@ let maxQty = 0;
 let isOpen = false;
 let closeTime = null;
 
-function postSummary(ctx) {
+function postSummary(ctx, closedOrders = false) {
   let summary = "📦 Order Summary:\n";
   let total = 0;
   let i = 1;
@@ -21,7 +21,14 @@ function postSummary(ctx) {
   }
   summary += `\n***********************************`;
   summary += `\nTotal ordered: ${total}${maxQty ? '/' + maxQty : '' }\n`;
-  summary += `\n 👉 Add your orders to @${bot.botInfo.username}.`;
+  if (closedOrders) {
+    summary += `\nOrders closed at: ${closeTime ? closeTime.toLocaleString() : "N/A"}`;
+  } else {
+    summary += `\nOrders are currently ${isOpen ? "open" : "closed"}.`;
+    if (isOpen){
+      summary += `\n 👉 Add your orders to @${bot.botInfo.username}.`;
+    }
+  }
   bot.telegram.sendMessage(GROUP_CHAT_ID, summary);
 }
 
@@ -70,18 +77,14 @@ bot.command("closeorders", (ctx) => {
   if (ctx.from.username !== process.env.HOST_USERNAME) {
     return ctx.reply("❌ Only host can close orders.");
   }
+  // post summary messages to the groupchat and also to the in the bot chat
+  if (!isOpen) return ctx.reply("❌ Orders are already closed.");
   isOpen = false;
-  closeTime = Date.now();
-  ctx.reply("🕒 Orders closed. 1 hour countdown started.");
-  setTimeout(() => {
-    for (const [user, data] of Object.entries(orders)) {
-      if (!data.paid) {
-        delete orders[user];
-      }
-    }
-    ctx.reply("⏰ Time's up! Unpaid orders removed.");
-    postSummary(ctx);
-  }, 3600000); // 1 hour
+  closeTime = new Date();
+  ctx.reply("🔴 Orders are now closed.")
+  postSummary(ctx)
+  bot.telegram.sendMessage(GROUP_CHAT_ID, "🔴 Orders are now closed."
+  + `\nClosed at: ${closeTime.toLocaleString()}`);
 });
 
 bot.on("message", (ctx) => {
