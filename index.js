@@ -10,12 +10,13 @@ let closeTime = null;
 function postSummary(ctx) {
   let summary = "📦 Order Summary:\n";
   let total = 0;
-  let i = 0;
+  let i = 1;
   for (const [user, data] of Object.entries(orders)) {
     // list the orders by each user with numbered
     summary += `\n${i}. ${user}: x ${data.qty} (${
       data.paid ? "✅ Paid" : "❌ Not Paid"
     })`;
+    i++;
     total += data.qty;
   }
   summary += `\***********************************`;
