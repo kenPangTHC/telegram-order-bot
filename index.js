@@ -194,10 +194,20 @@ bot.command("order", (ctx) => {
     validFirstQty = 1;
   }
   
-  // Check against item constraints
-  if (validFirstQty < item.min || validFirstQty > item.max) {
+  // Check against item max constraint only
+  if (validFirstQty > item.max) {
     const maxText = item.max === Infinity ? "unlimited" : item.max;
-    return ctx.reply(`❌ Invalid quantity for ${item.name} (${firstItemLetter}): must be between ${item.min} and ${maxText}.`);
+    return ctx.reply(`❌ Invalid quantity for ${item.name} (${firstItemLetter}): maximum is ${maxText}.`);
+  }
+  
+  // Check capacity left for this specific item
+  const currentItemQty = Object.values(orders).reduce((sum, order) => {
+    return sum + (order.items?.[item.name] || 0);
+  }, 0);
+  
+  if (item.max !== Infinity && currentItemQty + validFirstQty > item.max) {
+    const remainingCapacity = item.max - currentItemQty;
+    return ctx.reply(`❌ Only ${remainingCapacity} slots remaining for ${item.name} (${firstItemLetter}).`);
   }
   
   userOrder[item.name] = firstQty;
