@@ -19,8 +19,8 @@ function postSummary(ctx) {
     i++;
     total += data.qty;
   }
-  summary += `\***********************************`;
-  summary += `\nTotal ordered: ${total}/${maxQty}\n`;
+  summary += `\n***********************************`;
+  summary += `\nTotal ordered: ${total}${maxQty ? '/' + maxQty : '' }\n`;
   summary += `\n 👉 Add your orders to @${bot.botInfo.username}.`;
   bot.telegram.sendMessage(GROUP_CHAT_ID, summary);
 }
