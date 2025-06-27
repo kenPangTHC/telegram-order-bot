@@ -47,7 +47,7 @@ bot.command('paid', ctx => {
     ctx.reply(`💰 Marked @${user} as paid.`);
     postSummary(ctx);
   } else {
-    ctx.reply('❌ You haven't ordered yet.');
+    ctx.reply("❌ You haven't ordered yet.");
   }
 });
 
@@ -64,7 +64,7 @@ bot.command('closeorders', ctx => {
         delete orders[user];
       }
     }
-    ctx.reply('⏰ Time's up! Unpaid orders removed.');
+    ctx.reply("⏰ Time's up! Unpaid orders removed.");
     postSummary(ctx);
   }, 3600000); // 1 hour
 });
