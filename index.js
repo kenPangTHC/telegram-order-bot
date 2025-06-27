@@ -14,8 +14,19 @@ function postSummary(ctx, closedOrders = false) {
   let summary = "📦 Order Summary:\n";
   let totalOrders = Object.keys(orders).length;
   
+  // Display available items when orders are open
+  if (isOpen && global.availableItems && global.availableItems.length > 0) {
+    summary += "\n📋 Available Items:\n";
+    global.availableItems.forEach((item, index) => {
+      const letter = String.fromCharCode(65 + index); // A, B, C, etc.
+      const maxText = item.max === Infinity ? "unlimited" : item.max;
+      summary += `${letter}. ${item.name} (${item.min}-${maxText})\n`;
+    });
+    summary += "\n";
+  }
+  
   if (totalOrders === 0) {
-    summary += "\nNo orders yet.";
+    summary += "No orders yet.";
   } else {
     let i = 1;
     for (const [user, data] of Object.entries(orders)) {
@@ -177,7 +188,14 @@ bot.command("order", (ctx) => {
   
   let item = global.availableItems[itemIndex];
   
-  if (isNaN(firstQty) || firstQty < item.min || firstQty > item.max) {
+  // Default to 1 if no quantity specified or invalid
+  let validFirstQty = firstQty;
+  if (isNaN(firstQty) || firstQty < 1 || firstQty > 5) {
+    validFirstQty = 1;
+  }
+  
+  // Check against item constraints
+  if (validFirstQty < item.min || validFirstQty > item.max) {
     const maxText = item.max === Infinity ? "unlimited" : item.max;
     return ctx.reply(`❌ Invalid quantity for ${item.name} (${firstItemLetter}): must be between ${item.min} and ${maxText}.`);
   }
@@ -206,12 +224,19 @@ bot.command("order", (ctx) => {
     
     item = global.availableItems[itemIndex];
     
-    if (isNaN(qty) || qty < item.min || qty > item.max) {
-      const maxText = item.max === Infinity ? "unlimited" : item.max;
-      return ctx.reply(`❌ Invalid quantity for ${item.name} (${itemLetter}): must be between ${item.min} and ${maxText}.`);
+    // Default to 1 if no quantity specified or invalid
+    let validQty = qty;
+    if (isNaN(qty) || qty < 1 || qty > 5) {
+      validQty = 1;
     }
     
-    userOrder[item.name] = qty;
+    // Check against item max constraint only
+    if (validQty > item.max) {
+      const maxText = item.max === Infinity ? "unlimited" : item.max;
+      return ctx.reply(`❌ Invalid quantity for ${item.name} (${itemLetter}): maximum is ${maxText}.`);
+    }
+    
+    userOrder[item.name] = validQty;
   }
   
   // Check total capacity constraints
