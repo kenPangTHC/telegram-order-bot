@@ -49,9 +49,27 @@ function postSummary(ctx, closedOrders = false) {
   summary += `\n***********************************`;
   
   let totalQty = Object.values(orders).reduce((sum, o) => sum + o.qty, 0);
+  // Calculate quantities per item type
+  const itemTotals = {};
+  Object.values(orders).forEach(order => {
+    Object.entries(order.items || {}).forEach(([itemName, qty]) => {
+      itemTotals[itemName] = (itemTotals[itemName] || 0) + qty;
+    });
+  });
+  
+  // Display totals per item if there are any orders
+  if (Object.keys(itemTotals).length > 0) {
+    summary += "\n\n📊 Item Totals:\n";
+    global.availableItems.forEach((item, index) => {
+      const letter = String.fromCharCode(65 + index);
+      const total = itemTotals[item.name] || 0;
+      const maxText = item.max === Infinity ? "∞" : item.max;
+      summary += `${letter}. ${item.name}: ${total}/${maxText}\n`;
+    });
+  }
+  
   summary += `\nTotal quantity: ${totalQty}${maxQty !== Infinity ? '/' + maxQty : ''}`;
   summary += `\nTotal orders: ${totalOrders}`;
-  
   if (closedOrders) {
     summary += `\nOrders closed at: ${closeTime ? closeTime.toLocaleString() : "N/A"}`;
   } else {
