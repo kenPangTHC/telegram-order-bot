@@ -25,15 +25,22 @@ function postSummary(ctx) {
 }
 
 bot.command("startorders", (ctx) => {
-  // set a /startorders <min> <max> but max is not stated then it is unlimited
-  if (ctx.from.username !== process.env.HOST_USERNAME) {
-    return ctx.reply("❌ Only host can start orders.");
+  const args = ctx.message.text.split(" ");
+  const min = parseInt(args[1]);
+  const max = args[2] ? parseInt(args[2]) : Infinity;
+  
+  if (!min || min < 1) {
+    return ctx.reply("❌ Please provide a valid minimum quantity: /startorders <min> [max]");
   }
-  const parts = ctx.message.text.split(" ");
-  maxQty = parseInt(parts[1]);
-  isOpen = true;
+  
+  maxQty = max;
   orders = {};
-  ctx.reply(`🚀 Order started! Max slots: ${maxQty}`);
+  isOpen = true;
+  closeTime = null;
+  
+  const maxText = max === Infinity ? "unlimited" : max;
+  ctx.reply(`🟢 Orders are now open! Min: ${min}, Max: ${maxText}`);
+  postSummary(ctx);
 });
 
 bot.command("order", (ctx) => {
