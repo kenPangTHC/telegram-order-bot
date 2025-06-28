@@ -9,6 +9,30 @@ let closeTime = null;
 // Initialize global available items
 global.availableItems = [];
 
+// Helper function to get user identifier (username or ID)
+function getUserIdentifier(user) {
+  return user.username || user.id.toString();
+}
+
+// Helper function to get user display name
+function getUserDisplayName(user) {
+  if (user.username) {
+    return `@${user.username}`;
+  }
+  const firstName = user.first_name || '';
+  const lastName = user.last_name || '';
+  return `${firstName} ${lastName}`.trim() || `User ${user.id}`;
+}
+
+// Helper function to check if user is host
+function isHost(user) {
+  const username = user.username;
+  const userId = user.id.toString();
+  
+  return (username && (username === process.env.HOST_USERNAME || username === process.env.HOST2_USERNAME)) ||
+         userId === process.env.HOST_USER_ID || userId === process.env.HOST2_USER_ID;
+}
+
 
 function postSummary(ctx, closedOrders = false) {
   let summary = "📦 Order Summary:\n";
@@ -29,7 +53,7 @@ function postSummary(ctx, closedOrders = false) {
     summary += "No orders yet.";
   } else {
     let i = 1;
-    for (const [user, data] of Object.entries(orders)) {
+    for (const [userKey, data] of Object.entries(orders)) {
       const itemsList = Object.entries(data.items || {})
         .map(([itemName, qty]) => {
           // Find the item index to get the letter (A, B, C, etc.)
@@ -39,7 +63,8 @@ function postSummary(ctx, closedOrders = false) {
         })
         .join(", ");
       
-      summary += `\n${i}. @${user}: ${itemsList} (${
+      const displayName = data.userInfo ? getUserDisplayName(data.userInfo) : `@${userKey}`;
+      summary += `\n${i}. ${displayName}: ${itemsList} (${
         data.paid ? "✅ Paid" : "❌ Not Paid"
       })`;
       i++;
@@ -84,7 +109,7 @@ function postSummary(ctx, closedOrders = false) {
 
 bot.command("startorders", (ctx) => {
   // check if the user is the host and host2
-  if (ctx.from.username !== process.env.HOST_USERNAME && ctx.from.username !== process.env.HOST2_USERNAME) {
+  if (!isHost(ctx.from)) {
     return ctx.reply("❌ Only the host can start orders.");
   }
   const args = ctx.message.text.split(" ");
@@ -185,7 +210,7 @@ bot.command("order", (ctx) => {
     return ctx.reply("❌ Please specify items and quantities:\n\n/order A 2 \nor\n /order A 2\nB 1\nC 3");
   }
   
-  const user = ctx.from.username;
+  const user = getUserIdentifier(ctx.from);
   const userOrder = {};
   
   // Get available items from the global items list (need to store from startorders)
@@ -206,13 +231,15 @@ bot.command("order", (ctx) => {
   
   let item = global.availableItems[itemIndex];
   
-  // Default to 1 if no quantity specified or invalid
+  // Default to 1 if no quantity specified or invalid, max 5 per item
   let validFirstQty = firstQty;
-  if (isNaN(firstQty) || firstQty < 1 || firstQty > 5) {
+  if (isNaN(firstQty) || firstQty < 1) {
     validFirstQty = 1;
+  } else if (firstQty > 5) {
+    validFirstQty = 5;
   }
   
-  // Check against item max constraint only
+  // Check against item max constraint
   if (validFirstQty > item.max) {
     const maxText = item.max === Infinity ? "unlimited" : item.max;
     return ctx.reply(`❌ Invalid quantity for ${item.name} (${firstItemLetter}): maximum is ${maxText}.`);
@@ -226,9 +253,7 @@ bot.command("order", (ctx) => {
   if (item.max !== Infinity && currentItemQty + validFirstQty > item.max) {
     const remainingCapacity = item.max - currentItemQty;
     return ctx.reply(`❌ Only ${remainingCapacity} slots remaining for ${item.name} (${firstItemLetter}).`);
-  }
-  
-  userOrder[item.name] = firstQty;
+  }    userOrder[item.name] = validFirstQty;
   
   // Parse additional orders from subsequent lines
   for (let i = 1; i < lines.length; i++) {
@@ -252,13 +277,15 @@ bot.command("order", (ctx) => {
     
     item = global.availableItems[itemIndex];
     
-    // Default to 1 if no quantity specified or invalid
+    // Default to 1 if no quantity specified or invalid, max 5 per item
     let validQty = qty;
-    if (isNaN(qty) || qty < 1 || qty > 5) {
+    if (isNaN(qty) || qty < 1) {
       validQty = 1;
+    } else if (qty > 5) {
+      validQty = 5;
     }
     
-    // Check against item max constraint only
+    // Check against item max constraint
     if (validQty > item.max) {
       const maxText = item.max === Infinity ? "unlimited" : item.max;
       return ctx.reply(`❌ Invalid quantity for ${item.name} (${itemLetter}): maximum is ${maxText}.`);
@@ -267,30 +294,41 @@ bot.command("order", (ctx) => {
     userOrder[item.name] = validQty;
   }
   
+  // Check user's order limit (max 5 items per user)
+  const requestedTotalQty = Object.values(userOrder).reduce((sum, qty) => sum + qty, 0);
+  
+  if (requestedTotalQty > 5) {
+    return ctx.reply(`❌ You can only order a maximum of 5 items total. Your request has ${requestedTotalQty} items.`);
+  }
+  
   // Check total capacity constraints
   const currentTotalQty = Object.values(orders).reduce((sum, order) => {
     return sum + Object.values(order.items || {}).reduce((itemSum, qty) => itemSum + qty, 0);
   }, 0);
-  
-  const requestedTotalQty = Object.values(userOrder).reduce((sum, qty) => sum + qty, 0);
   
   if (maxQty !== Infinity && currentTotalQty + requestedTotalQty > maxQty) {
     const remainingSlots = maxQty - currentTotalQty;
     return ctx.reply(`❌ Only ${remainingSlots} slots remaining. Your requested ${requestedTotalQty} items exceed capacity.`);
   }
   
-  orders[user] = { items: userOrder, paid: false, qty: requestedTotalQty };
+  orders[user] = { 
+    items: userOrder, 
+    paid: false, 
+    qty: requestedTotalQty,
+    userInfo: ctx.from 
+  };
   
   const itemsList = Object.entries(userOrder)
     .map(([item, qty]) => `${item}: ${qty}`)
     .join(", ");
   
-  ctx.reply(`✅ Order received from @${user}:\n${itemsList}`);
+  const displayName = getUserDisplayName(ctx.from);
+  ctx.reply(`✅ Order received from ${displayName}:\n${itemsList}`);
   postSummary(ctx);
 });
 
 bot.command("paid", (ctx) => {
-  const user = ctx.from.username;
+  const user = getUserIdentifier(ctx.from);
   if (orders[user]) {
     orders[user].paid = true;
     const itemsList = Object.entries(orders[user].items || {})
@@ -301,7 +339,8 @@ bot.command("paid", (ctx) => {
         return `${itemLetter}: ${qty}`;
       })
       .join(", ");
-    ctx.reply(`💰 Marked @${user} as paid for: ${itemsList}`);
+    const displayName = getUserDisplayName(ctx.from);
+    ctx.reply(`💰 Marked ${displayName} as paid for: ${itemsList}`);
     postSummary(ctx);
   } else {
     ctx.reply("❌ You haven't ordered yet.");
@@ -309,7 +348,7 @@ bot.command("paid", (ctx) => {
 });
 
 bot.command("closeorders", (ctx) => {
-  if (ctx.from.username !== process.env.HOST_USERNAME) {
+  if (!isHost(ctx.from)) {
     return ctx.reply("❌ Only host can close orders.");
   }
   // post summary messages to the groupchat and also to the in the bot chat
